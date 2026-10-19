@@ -565,6 +565,8 @@ class IamServiceLinkedRoleIntegrationTest {
         String readOnly = "arn:aws:iam::aws:policy/ReadOnlyAccess";
 
         refusedAsUnmodifiable("UpdateRole", "RoleName", roleName, "Description", "hijacked");
+        refusedAsUnmodifiable("UpdateRoleDescription", "RoleName", roleName,
+                "Description", "hijacked");
         refusedAsUnmodifiable("UpdateAssumeRolePolicy", "RoleName", roleName,
                 "PolicyDocument", "{\"Version\":\"2012-10-17\",\"Statement\":[]}");
         refusedAsUnmodifiable("DetachRolePolicy", "RoleName", roleName, "PolicyArn", readOnly);
@@ -738,6 +740,33 @@ class IamServiceLinkedRoleIntegrationTest {
      * try a different suffix." Recorded against AWS for a second plain create of
      * {@code batch.amazonaws.com}.
      */
+    @Test
+    @Order(30)
+    void aDescriptionOutsideItsShapeIsRefusedBeforeTheRoleIsCreated() {
+        // roleDescriptionType is the same shape CreateRole and UpdateRole take, so this answers
+        // ValidationError rather than this action's own InvalidInput, and stores nothing.
+        given()
+            .formParam("Action", "CreateServiceLinkedRole")
+            .formParam("AWSServiceName", "descprobe.amazonaws.com")
+            .formParam("Description", "d".repeat(1001))
+            .header("Authorization", AUTH_HEADER)
+        .when()
+            .post("/")
+        .then()
+            .statusCode(400)
+            .body("ErrorResponse.Error.Code", equalTo("ValidationError"))
+            .body("ErrorResponse.Error.Message", containsString("at 'description'"));
+
+        given()
+            .formParam("Action", "GetRole")
+            .formParam("RoleName", "AWSServiceRoleForDescprobe")
+            .header("Authorization", AUTH_HEADER)
+        .when()
+            .post("/")
+        .then()
+            .statusCode(404);
+    }
+
     @Test
     @Order(29)
     void creatingTheSameRoleTwiceNamesTheRoleThatIsTaken() {
